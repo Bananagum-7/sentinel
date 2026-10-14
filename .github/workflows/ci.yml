@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-and-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Unit tests
+        run: pytest -q
+      - name: Guard regression gate
+        run: python eval/gate.py | tee gate.txt
+      - name: Post gate results on the PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = "### Sentinel guard gate\n```\n" + fs.readFileSync('gate.txt', 'utf8') + "\n```";
+            await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body });

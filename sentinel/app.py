@@ -46,8 +46,13 @@ def build_gateway() -> tuple[Gateway, PolicyStore]:
         from sentinel.cache import FastEmbedEmbedder
 
         embedder = FastEmbedEmbedder()
+    providers = build_providers()
+    if os.getenv("SENTINEL_FAKE_UPSTREAM") == "1":  # load tests / demos without an API key
+        from sentinel.providers import FakeProvider
+
+        providers = {"groq": FakeProvider("groq", ["This is a canned answer from the fake upstream."], latency=0.3)}
     gateway = Gateway(
-        providers=build_providers(),
+        providers=providers,
         pii_detector=pii,
         injection_detector=CombinedInjectionDetector(detectors),
         cache=SemanticCache(embedder),

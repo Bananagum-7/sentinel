@@ -3,8 +3,8 @@
     SENTINEL_KEY=... locust -f eval/locustfile.py --host http://localhost:8000 \
         --users 20 --spawn-rate 5 --run-time 1m --headless
 
-Use a FakeProvider-backed server (scripts/run_fake_upstream.py) so the test
-measures the gateway, not Groq's rate limits.
+Start the server with SENTINEL_FAKE_UPSTREAM=1 so the test measures the
+gateway (fixed 300 ms fake upstream), not Groq's free-tier rate limits.
 """
 
 import os

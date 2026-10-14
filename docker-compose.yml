@@ -1,0 +1,19 @@
+# docker compose up --build
+#   Gateway:   http://localhost:8000  (OpenAI-compatible, /docs for the API explorer)
+#   Dashboard: http://localhost:8501
+services:
+  gateway:
+    build: .
+    env_file: .env
+    ports: ["8000:8000"]
+    volumes: ["sentinel-data:/app/data"]
+  dashboard:
+    build: .
+    command: ["streamlit", "run", "dashboard.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
+    environment:
+      SENTINEL_DB: /app/data/requests.db
+    ports: ["8501:8501"]
+    volumes: ["sentinel-data:/app/data"]
+    depends_on: [gateway]
+volumes:
+  sentinel-data:
