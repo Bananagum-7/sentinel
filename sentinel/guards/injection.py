@@ -53,6 +53,15 @@ RULES: list[tuple[str, float, str]] = [
     ("tool_hijack", 0.55, r"\b(call|invoke|run|execute|use)\b.{0,20}\b(tool|function)\b.{0,40}\b(without|skip|bypass)\b.{0,20}\b(approval|confirmation|check)"),
 ]
 
+LEET = str.maketrans({"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s"})
+SPACED_RE = re.compile(r"\b(?:\w[\-\.\s_*]){3,}\w\b")
+
+
+def normalise(text: str) -> str:
+    """Undo cheap obfuscation: leetspeak (1gn0re) and spaced letters (i-g-n-o-r-e)."""
+    t = text.translate(LEET)
+    return SPACED_RE.sub(lambda m: re.sub(r"[\-\.\s_*]", "", m.group()) if all(len(p) == 1 for p in re.split(r"[\-\.\s_*]", m.group())) else m.group(), t)
+
 
 class HeuristicInjectionDetector:
     def __init__(self, rules=RULES):
@@ -60,8 +69,9 @@ class HeuristicInjectionDetector:
 
     def score(self, text: str) -> InjectionResult:
         matched, keep = [], 1.0
+        variants = {text, normalise(text)}
         for name, weight, pattern in self.rules:
-            if pattern.search(text):
+            if any(pattern.search(v) for v in variants):
                 matched.append(name)
                 keep *= 1.0 - weight
         return InjectionResult(score=round(1.0 - keep, 4), matched=matched, detector="heuristic")
