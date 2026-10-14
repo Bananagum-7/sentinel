@@ -40,18 +40,47 @@ class InjectionDetector(Protocol):
 
 
 RULES: list[tuple[str, float, str]] = [
-    # (name, weight, pattern)
-    ("ignore_instructions", 0.85, r"\b(ignore|disregard|forget|override|bypass)\b.{0,40}\b(previous|prior|above|earlier|all|any|your|the)\b.{0,30}\b(instructions?|prompts?|rules|directions|guidelines|context)\b"),
-    ("new_instructions", 0.55, r"\b(new|updated|real|actual)\s+(instructions?|rules|system prompt)\b\s*[:\-]"),
-    ("reveal_prompt", 0.8, r"\b(reveal|show|print|repeat|output|leak|tell me|what (is|are))\b.{0,30}\b(your|the|its)\s+(full\s+|exact\s+)?(system|hidden|initial|original|secret)\s+(prompt|instructions?|message|rules)\b(?!\s+(for|of)\b)"),
-    ("role_override", 0.5, r"\b(you are now|from now on,? you|act as|pretend (to be|you are)|roleplay as|you will now)\b"),
-    ("jailbreak_persona", 0.8, r"\b(DAN|do anything now|developer mode|jailbreak|jailbroken|no restrictions|unfiltered|without (any )?(limits|restrictions|filters))\b"),
+    # (name, weight, pattern). Weights are tuned so one strong signal (>= 0.5) blocks
+    # on its own, while weak signals (< 0.5) only block in combination.
+    ("ignore_instructions", 0.85,
+     r"\b(ignore|disregard|forget|override|bypass|set aside|put aside|pay no attention to|stop following|don'?t follow)\b"
+     r".{0,40}\b(previous|prior|above|earlier|all|any|your|the|whatever)\b.{0,30}\b(instructions?|prompts?|rules|directions|guidelines|guidance|context|polic(y|ies))\b"),
+    ("instructions_void", 0.75,
+     r"\b(instructions?|directions|rules|guidance|guidelines)\b.{0,30}\b(no longer apply|are (now )?void|don'?t (apply|matter)|are cancelled)\b"),
+    ("new_instructions", 0.6,
+     r"(\b(new|updated|real|actual)\s+(instructions?|rules|system prompt)\b\s*[:\-])|(\b(system prompt|instructions?)\s+(update|change|override)\b)"),
+    ("reveal_prompt", 0.8,
+     r"\b(reveal|show|print|repeat|output|leak|tell me|summari[sz]e|what (is|are))\b.{0,30}\b(your|the|its)\s+"
+     r"(?:(?:full|exact|hidden|system|secret|initial|original|confidential)\s+){1,3}(prompt|instructions?|message|rules)\b(?!\s+(for|of)\b)"),
+    ("prompt_extraction", 0.7,
+     r"\b(repeat|print|output|begin|start)\b.{0,30}\b(text|everything|words) (above|before)\b"
+     r"|\b(instructions?|rules)\b.{0,20}\b(before my first message|you operate under|you were given)\b"
+     r"|\b(begin|start) your (reply|response|answer) with\b.{0,30}\b(rules|instructions|prompt)\b"),
+    ("role_override", 0.4, r"\b(you are now|from now on,? you|act as|pretend (to be|you are)|roleplay as|you will now)\b"),
+    ("jailbreak_strong", 0.85, r"\b(DAN|do anything now|jailbroken)\b"),
+    ("jailbreak_weak", 0.35, r"\b(developer mode|jailbreak|unfiltered|no (rules|restrictions|limits|content policy)|two personas)\b"),
+    ("unrestricted_answer", 0.6,
+     r"\b(answer|respond|reply|continue)\b.{0,30}\b(without|with no)\s+(any\s+)?(limits|restrictions|filters|rules)\b"
+     r"|\b(policy|policies|restrictions|filters) (was|were|have been|has been) (removed|lifted|disabled)\b"),
     ("template_tokens", 0.9, r"(<\|im_start\|>|<\|im_end\|>|<\|system\|>|\[INST\]|<<SYS>>|###\s*(system|instruction)\s*:)"),
     ("exfiltration", 0.6, r"\b(send|post|forward|upload|exfiltrate)\b.{0,40}\b(to|at)\b.{0,20}(https?://|\b[\w.-]+@[\w.-]+\b)"),
     ("authority_claim", 0.35, r"\b(i am|this is)\s+(your|the)\s+(developer|admin|administrator|creator|owner|openai|anthropic|system)\b"),
-    ("disable_safety", 0.6, r"\b(disable|turn off|remove|deactivate)\b.{0,30}\b(safety|guardrails?|filters?|moderation|restrictions)\b"),
+    ("disable_safety", 0.6,
+     r"\b(disable|turn off|deactivate|bypass|circumvent|get around)\b.{0,30}\b(safety|guardrails?|moderation|content filters?|your (filters|restrictions))\b"),
+    ("addressed_to_ai", 0.45,
+     r"\b(assistant|ai|agent|model|bot|llm)\b\s*[,:\-]\s*.{0,20}\b(ignore|approve|issue|send|forward|reveal|call|disregard)\b"),
+    ("skip_review", 0.5, r"\b(without|skip(ping)?|bypass(ing)?)\s+(any\s+)?(human|manual)?\s*(review|approval|confirmation)\b"),
     ("tool_hijack", 0.55, r"\b(call|invoke|run|execute|use)\b.{0,20}\b(tool|function)\b.{0,40}\b(without|skip|bypass)\b.{0,20}\b(approval|confirmation|check)"),
 ]
+
+LEET = str.maketrans({"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s"})
+SPACED_RE = re.compile(r"\b(?:\w[\-\.\s_*]){3,}\w\b")
+
+
+def normalise(text: str) -> str:
+    """Undo cheap obfuscation: leetspeak (1gn0re) and spaced letters (i-g-n-o-r-e)."""
+    t = text.translate(LEET)
+    return SPACED_RE.sub(lambda m: re.sub(r"[\-\.\s_*]", "", m.group()) if all(len(p) == 1 for p in re.split(r"[\-\.\s_*]", m.group())) else m.group(), t)
 
 
 class HeuristicInjectionDetector:
@@ -60,8 +89,9 @@ class HeuristicInjectionDetector:
 
     def score(self, text: str) -> InjectionResult:
         matched, keep = [], 1.0
+        variants = {text, normalise(text)}
         for name, weight, pattern in self.rules:
-            if pattern.search(text):
+            if any(pattern.search(v) for v in variants):
                 matched.append(name)
                 keep *= 1.0 - weight
         return InjectionResult(score=round(1.0 - keep, 4), matched=matched, detector="heuristic")

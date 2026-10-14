@@ -48,6 +48,19 @@ def luhn_ok(digits: str) -> bool:
     return total % 10 == 0
 
 
+def _phone_ok(s: str) -> bool:
+    digits = re.sub(r"\D", "", s)
+    if not 10 <= len(digits) <= 13:
+        return False
+    # A bare, unformatted 10-digit run is only treated as a phone number if it
+    # looks like an Indian mobile (starts 6-9). Otherwise counters and IDs
+    # like "1234567890 events" get redacted. Trade-off: a bare US number
+    # written without separators is missed; formatted ones are still caught.
+    if s.isdigit() and len(s) == 10:
+        return s[0] in "6789"
+    return True
+
+
 # Order = priority when two patterns overlap (earlier wins).
 PATTERNS: list[tuple[str, re.Pattern, callable]] = [
     ("EMAIL", re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b"), None),
@@ -56,7 +69,7 @@ PATTERNS: list[tuple[str, re.Pattern, callable]] = [
     ("US_SSN", re.compile(r"\b\d{3}-\d{2}-\d{4}\b"), None),
     ("IN_PAN", re.compile(r"\b[A-Z]{5}\d{4}[A-Z]\b"), None),
     ("PHONE", re.compile(r"(?<![\w\-])(?<!\d[ \-])(?:\+\d{1,3}[\s\-]?)?(?:\(\d{2,5}\)[\s\-]?)?\d{3,5}[\s\-]?\d{3,4}[\s\-]?\d{0,4}(?![\w\-])(?![ \-]\d)"),
-     lambda s: 10 <= len(re.sub(r"\D", "", s)) <= 13),
+     lambda s: _phone_ok(s)),
     ("IP_ADDRESS", re.compile(r"\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b"), None),
 ]
 
