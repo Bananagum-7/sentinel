@@ -1,4 +1,13 @@
-"""PII detection.
+"""PII detection, redaction and restoration.
+
+Flow for one request:
+    "Email priya@acme.com about order 4471"
+      -> redact ->  "Email <EMAIL_1> about order 4471"     (sent to the model)
+      <- model  <-  "Done, I drafted a note to <EMAIL_1>."
+      -> restore -> "Done, I drafted a note to priya@acme.com."  (sent to the client)
+
+The mapping placeholder -> real value lives only in memory for the duration
+of the request. It is never logged, cached or traced.
 
 Detectors:
 - RegexPIIDetector (default): emails, phone numbers, card numbers (with a
@@ -9,7 +18,7 @@ Detectors:
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 
@@ -69,3 +78,59 @@ class RegexPIIDetector:
                 spans.append(Span(s, e, entity, text[s:e]))
                 taken.append((s, e))
         return sorted(spans, key=lambda sp: sp.start)
+
+
+@dataclass
+class Redactor:
+    """Holds the placeholder mapping for ONE request. Create a new one per request."""
+
+    detector: PIIDetector
+    mapping: dict[str, str] = field(default_factory=dict)  # placeholder -> value
+    _by_value: dict[str, str] = field(default_factory=dict)  # value -> placeholder
+    _counts: dict[str, int] = field(default_factory=dict)
+
+    def redact(self, text: str) -> str:
+        spans = self.detector.detect(text)
+        if not spans:
+            return text
+        out, last = [], 0
+        for sp in spans:
+            ph = self._by_value.get(sp.text)
+            if ph is None:
+                self._counts[sp.entity] = self._counts.get(sp.entity, 0) + 1
+                ph = f"<{sp.entity}_{self._counts[sp.entity]}>"
+                self._by_value[sp.text] = ph
+                self.mapping[ph] = sp.text
+            out.append(text[last : sp.start])
+            out.append(ph)
+            last = sp.end
+        out.append(text[last:])
+        return "".join(out)
+
+    def restore(self, text: str) -> str:
+        if not self.mapping:
+            return text
+        # Models sometimes drop the angle brackets ("EMAIL_1") - accept both forms.
+        def sub(m: re.Match) -> str:
+            key = f"<{m.group(1)}>"
+            return self.mapping.get(key, m.group(0))
+
+        return re.sub(r"<?\b([A-Z_]+_\d+)\b>?", sub, text)
+
+    @property
+    def counts(self) -> dict[str, int]:
+        return dict(self._counts)
+
+
+def redact_messages(messages: list[dict], redactor: Redactor) -> list[dict]:
+    """Redact every text field of OpenAI-style messages (string or list-of-parts content)."""
+    out = []
+    for m in messages:
+        m = dict(m)
+        content = m.get("content")
+        if isinstance(content, str):
+            m["content"] = redactor.redact(content)
+        elif isinstance(content, list):
+            m["content"] = [{**p, "text": redactor.redact(p["text"])} if p.get("type") == "text" else p for p in content]
+        out.append(m)
+    return out
