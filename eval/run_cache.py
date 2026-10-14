@@ -6,7 +6,7 @@
 For each threshold we measure:
     paraphrase hit rate - share of 30 paraphrase pairs served from cache (want high)
     wrong hits          - near-miss pairs served from cache (must be 0: a wrong answer)
-and report the critical-token guard's effect by running with and without it.
+and report the intent guard's effect by running with and without it.
 """
 
 from __future__ import annotations
@@ -15,31 +15,26 @@ import argparse
 
 from common import DATA, load_jsonl, save
 
-from sentinel import cache as cache_mod
 from sentinel.cache import SemanticCache
 
 SYSTEM = {"role": "system", "content": "You are the support assistant for an online store."}
 
 
 def run(embedder, pairs, threshold: float, guard: bool) -> dict:
-    original = cache_mod.critical_tokens
-    if not guard:
-        cache_mod.critical_tokens = lambda text: frozenset()
-    try:
-        hits = wrong = 0
-        n_para = sum(p["should_hit"] for p in pairs)
-        n_near = len(pairs) - n_para
-        for p in pairs:
-            c = SemanticCache(embedder)  # fresh cache per pair: isolates each judgement
-            c.store("app", [SYSTEM, {"role": "user", "content": p["cached"]}], "m", {"a": 1}, ttl=60)
-            res = c.lookup("app", [SYSTEM, {"role": "user", "content": p["query"]}], "m", threshold)
-            served = res.response is not None
-            if p["should_hit"] and served:
-                hits += 1
-            if not p["should_hit"] and served:
-                wrong += 1
-    finally:
-        cache_mod.critical_tokens = original
+    hits = wrong = 0
+    n_para = sum(p["should_hit"] for p in pairs)
+    n_near = len(pairs) - n_para
+    for p in pairs:
+        c = SemanticCache(embedder)  # fresh cache per pair: isolates each judgement
+        if not guard:
+            c.intent_guard = lambda a, b: True
+        c.store("app", [SYSTEM, {"role": "user", "content": p["cached"]}], "m", {"a": 1}, ttl=60)
+        res = c.lookup("app", [SYSTEM, {"role": "user", "content": p["query"]}], "m", threshold)
+        served = res.response is not None
+        if p["should_hit"] and served:
+            hits += 1
+        if not p["should_hit"] and served:
+            wrong += 1
     return {"threshold": threshold, "guard": guard, "paraphrase_hit_rate": round(hits / n_para, 3), "wrong_hits": wrong, "n_near_miss": n_near}
 
 

@@ -36,6 +36,31 @@ def critical_tokens(text: str) -> frozenset[str]:
     return frozenset(t.lower().strip("\"'`") for t in CRITICAL_RE.findall(text))
 
 
+# Words that change how a question is phrased but not what it asks.
+FUNCTION_WORDS = frozenset("""
+a an the i me my mine we our you your it its is are was were be been being am do does did can could would should will shall may might
+how what when where why which who whom whose to of in on at by for with from about into over after before up out
+and or but if then so than that this these those there here please kindly just exactly usually typically actually really
+possible possibly way ways there's what's it's i'm get got any some all also still
+""".split())
+WORD_RE = re.compile(r"[a-z0-9]+")
+
+
+def content_words(text: str) -> frozenset[str]:
+    return frozenset(w for w in WORD_RE.findall(text.lower()) if w not in FUNCTION_WORDS)
+
+
+def same_intent(a: str, b: str) -> bool:
+    """Conservative check run AFTER the embedding match.
+
+    Embeddings say "enable 2FA" ~ "disable 2FA" and "Canada" ~ "Mexico". So a
+    cached answer is reused only if both questions have the same numbers and
+    identifiers and the same content words; they may differ only in function
+    words ("How do I" vs "How can I", "my", "please").
+    """
+    return critical_tokens(a) == critical_tokens(b) and content_words(a) == content_words(b)
+
+
 def last_user_text(messages: list[dict]) -> str:
     for m in reversed(messages):
         if m.get("role") == "user":
@@ -58,7 +83,6 @@ def exact_key(messages: list[dict], model: str) -> str:
 @dataclass
 class _Entry:
     question: str
-    critical: frozenset[str]
     vector: np.ndarray
     response: dict
     expires: float
@@ -75,6 +99,7 @@ class CacheResult:
 class SemanticCache:
     embedder: object
     max_entries: int = 5000
+    intent_guard: object = same_intent  # swap for `lambda a, b: True` to measure the guard's effect
     _exact: dict[str, tuple[dict, float]] = field(default_factory=dict)
     _buckets: dict[str, list[_Entry]] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock)
@@ -93,18 +118,17 @@ class SemanticCache:
             return CacheResult("miss")
         q_vec = self.embedder.embed_query(question)
         sims = np.stack([e.vector for e in live]) @ q_vec
-        crit = critical_tokens(question)
         for i in np.argsort(-sims):
             if sims[i] < threshold:
                 break
-            if live[i].critical == crit:
+            if self.intent_guard(question, live[i].question):
                 return CacheResult("semantic", live[i].response, float(sims[i]))
         return CacheResult("miss", similarity=float(sims.max()))
 
     def store(self, scope: str, messages: list[dict], model: str, response: dict, ttl: int, now: float | None = None) -> None:
         now = now or time.time()
         question = last_user_text(messages)
-        entry = _Entry(question, critical_tokens(question), self.embedder.embed_query(question) if question else None, response, now + ttl)
+        entry = _Entry(question, self.embedder.embed_query(question) if question else None, response, now + ttl)
         with self._lock:
             self._exact[f"{scope}:{exact_key(messages, model)}"] = (response, now + ttl)
             if question:
