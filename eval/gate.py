@@ -24,7 +24,7 @@ from sentinel.guards.injection import HeuristicInjectionDetector
 from sentinel.guards.pii import RegexPIIDetector
 
 GATES = {
-    "injection_recall_min": 0.80,
+    "injection_recall_min": 0.90,
     "injection_fpr_max": 0.05,
     "pii_recall_min": 0.95,
     "pii_false_positives_max": 0,
