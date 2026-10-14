@@ -1,12 +1,14 @@
 """Load per-app policies and resolve a gateway API key to its app.
 
 Keys live in environment variables (named by `key_env`), so the YAML file
-can be committed safely.
+can be committed safely. Keys are compared with hmac.compare_digest to avoid
+timing attacks.
 """
 
 from __future__ import annotations
 
 import copy
+import hmac
 import os
 from pathlib import Path
 from typing import Literal
@@ -72,3 +74,11 @@ class PolicyStore:
             if policy.key_env and env.get(policy.key_env):
                 keys[env[policy.key_env]] = name
         return cls(apps, keys)
+
+    def authenticate(self, api_key: str | None) -> AppPolicy | None:
+        if not api_key:
+            return None
+        for key, app in self._keys.items():
+            if hmac.compare_digest(key.encode(), api_key.encode()):
+                return self.apps[app]
+        return None
