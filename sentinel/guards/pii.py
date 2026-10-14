@@ -13,6 +13,8 @@ Detectors:
 - RegexPIIDetector (default): emails, phone numbers, card numbers (with a
   Luhn checksum so random 16-digit IDs are not flagged), Indian PAN and
   Aadhaar, US SSN, IPv4. Fast (~0.1 ms), no model, fully testable.
+- PresidioPIIDetector (optional): adds person names and locations using
+  spaCy NER. Names are the main thing regex cannot catch.
 """
 
 from __future__ import annotations
@@ -77,6 +79,29 @@ class RegexPIIDetector:
                     continue
                 spans.append(Span(s, e, entity, text[s:e]))
                 taken.append((s, e))
+        return sorted(spans, key=lambda sp: sp.start)
+
+
+class PresidioPIIDetector:
+    """Regex detector + Presidio NER for PERSON and LOCATION.
+
+    pip install presidio-analyzer && python -m spacy download en_core_web_sm
+    """
+
+    def __init__(self, score_threshold: float = 0.6):
+        from presidio_analyzer import AnalyzerEngine
+        from presidio_analyzer.nlp_engine import NlpEngineProvider
+
+        nlp = NlpEngineProvider(nlp_configuration={"nlp_engine_name": "spacy", "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}]}).create_engine()
+        self.analyzer = AnalyzerEngine(nlp_engine=nlp)
+        self.regex = RegexPIIDetector()
+        self.threshold = score_threshold
+
+    def detect(self, text: str) -> list[Span]:
+        spans = self.regex.detect(text)
+        for r in self.analyzer.analyze(text=text, language="en", entities=["PERSON", "LOCATION"]):
+            if r.score >= self.threshold and not any(r.start < s.end and s.start < r.end for s in spans):
+                spans.append(Span(r.start, r.end, r.entity_type, text[r.start : r.end]))
         return sorted(spans, key=lambda sp: sp.start)
 
 
