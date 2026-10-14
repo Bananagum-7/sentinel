@@ -45,6 +45,19 @@ class AppPolicy(BaseModel):
     timeout_seconds: float = 30
     max_retries: int = 2
 
+    def routes_for(self, requested: str) -> list[Route]:
+        """The requested model goes first if it is a known model; then the default chain."""
+        chain = list(self.models.get(requested) or [])
+        default = self.models.get("default", [])
+        if not chain:
+            known = {r.model for routes in self.models.values() for r in routes}
+            if requested in known:
+                provider = next(r.provider for routes in self.models.values() for r in routes if r.model == requested)
+                chain = [Route(provider=provider, model=requested)]
+        for r in default:
+            if r not in chain:
+                chain.append(r)
+        return chain
 
 
 def _merge(base: dict, override: dict) -> dict:

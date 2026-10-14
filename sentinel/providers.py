@@ -1,13 +1,24 @@
-"""Upstream LLM providers.
+"""Upstream LLM providers and the fallback router.
 
 Any OpenAI-compatible endpoint works (Groq, OpenRouter, Together, a local
 vLLM/Ollama server), so adding a provider is one entry in PROVIDERS.
+
+Router policy, per route in the fallback chain:
+- 429 (rate limited): skip to the next route immediately. Waiting a few
+  hundred ms won't clear a per-minute quota, and the user is waiting.
+- 5xx / timeout / connection error: retry the same route with exponential
+  backoff (0.25 s, 0.5 s ...) up to max_retries, then move on.
+- 4xx other than 429 (bad request, auth): fail fast. Retrying won't help and
+  another model would likely reject it too.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import time
+from dataclasses import dataclass, field
 from typing import AsyncIterator, Protocol
 
 import httpx
@@ -87,3 +98,55 @@ def build_providers(env: dict | None = None) -> dict[str, Provider]:
             continue
         out[name] = OpenAICompatibleProvider(name, cfg["base_url"], key, client)
     return out
+
+
+@dataclass
+class Attempt:
+    provider: str
+    model: str
+    status: int | None = None  # None = success
+    latency_ms: float = 0.0
+
+
+@dataclass
+class RouteResult:
+    response: dict
+    provider: str
+    model: str
+    attempts: list[Attempt] = field(default_factory=list)
+
+    @property
+    def fallback_used(self) -> bool:
+        return len({(a.provider, a.model) for a in self.attempts}) > 1
+
+
+class AllRoutesFailed(Exception):
+    def __init__(self, attempts: list[Attempt], last: ProviderError | None):
+        super().__init__(f"all routes failed: {[(a.model, a.status) for a in attempts]}")
+        self.attempts, self.last = attempts, last
+
+
+async def route_completion(providers: dict[str, Provider], routes, payload: dict, timeout: float, max_retries: int,
+                           backoff: float = 0.25) -> RouteResult:
+    attempts: list[Attempt] = []
+    last: ProviderError | None = None
+    for route in routes:
+        provider = providers.get(route.provider)
+        if provider is None:
+            continue
+        for attempt in range(max_retries + 1):
+            t0 = time.perf_counter()
+            try:
+                resp = await provider.complete({**payload, "model": route.model}, timeout)
+                attempts.append(Attempt(route.provider, route.model, None, (time.perf_counter() - t0) * 1000))
+                return RouteResult(resp, route.provider, route.model, attempts)
+            except ProviderError as err:
+                attempts.append(Attempt(route.provider, route.model, err.status, (time.perf_counter() - t0) * 1000))
+                last = err
+                if err.rate_limited:
+                    break  # next route
+                if not err.retryable:
+                    raise AllRoutesFailed(attempts, err) from err
+                if attempt < max_retries:
+                    await asyncio.sleep(backoff * (2**attempt))
+    raise AllRoutesFailed(attempts, last)

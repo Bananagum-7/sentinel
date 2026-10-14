@@ -23,6 +23,13 @@ def test_unknown_or_missing_key_rejected():
     assert store.authenticate(None) is None
 
 
+def test_routes_put_requested_model_first():
+    app = PolicyStore.from_yaml(POLICY, ENV).apps["docsight"]
+    routes = [r.model for r in app.routes_for("llama-3.1-8b-instant")]
+    assert routes == ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]
+    assert [r.model for r in app.routes_for("anything")] == ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+
+
 def test_token_bucket_burst_then_refill():
     now = [0.0]
     lim = TokenBucketLimiter(clock=lambda: now[0])
