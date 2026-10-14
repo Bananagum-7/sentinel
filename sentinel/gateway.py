@@ -11,6 +11,7 @@ from __future__ import annotations
 import time
 import uuid
 from dataclasses import dataclass
+from typing import AsyncIterator
 
 from sentinel.cache import SemanticCache
 from sentinel.guards.injection import InjectionDetector, scannable_text
@@ -37,6 +38,36 @@ class GatewayError(Exception):
 class GatewayResult:
     response: dict
     headers: dict
+
+
+class StreamRestorer:
+    """Restores PII placeholders in streamed text that may arrive split across chunks.
+
+    "<EMA" + "IL_1> is" must become "priya@acme.com is". Text after an
+    unmatched "<" is held back until the closing ">" (or until it clearly
+    isn't a placeholder), everything before it is released immediately.
+    """
+
+    def __init__(self, redactor: Redactor, max_hold: int = 40):
+        self.redactor, self.buf, self.max_hold = redactor, "", max_hold
+        self.full = []
+
+    def feed(self, text: str) -> str:
+        self.buf += text
+        cut = self.buf.rfind("<")
+        if cut != -1 and ">" not in self.buf[cut:] and len(self.buf) - cut <= self.max_hold:
+            ready, self.buf = self.buf[:cut], self.buf[cut:]
+        else:
+            ready, self.buf = self.buf, ""
+        out = self.redactor.restore(ready)
+        self.full.append(out)
+        return out
+
+    def flush(self) -> str:
+        out = self.redactor.restore(self.buf)
+        self.buf = ""
+        self.full.append(out)
+        return out
 
 
 class Gateway:
@@ -163,6 +194,66 @@ class Gateway:
                 root.set_attributes({"outcome": log.outcome, "cache": log.cache, "status": log.status,
                                      "prompt_tokens": log.prompt_tokens, "completion_tokens": log.completion_tokens})
                 self._finish(log, t_start)
+
+    # ---------- streaming ----------
+
+    async def stream(self, policy: AppPolicy, body: dict) -> tuple[AsyncIterator[str], dict]:
+        """Guards run before the first byte; returns (SSE iterator, headers). Streaming bypasses the cache."""
+        t_start = time.perf_counter()
+        requested = body.get("model") or "default"
+        log = RequestLog(request_id=f"req_{uuid.uuid4().hex[:16]}", app=policy.name, requested_model=requested, stream=True, cache="bypass")
+        try:
+            messages, redactor = self._admit(policy, body, log)
+        except GatewayError:
+            self._finish(log, t_start)
+            raise
+        payload = {k: v for k, v in body.items() if k in PASSTHROUGH} | {"messages": messages}
+        routes = [r for r in policy.routes_for(requested) if r.provider in self.providers]
+
+        async def events() -> AsyncIterator[str]:
+            import json
+
+            restorer = StreamRestorer(redactor)
+            try:
+                for route in routes:  # fallback is only possible before the first token is sent
+                    sent_any = False
+                    log.attempts += 1
+                    try:
+                        async for chunk in self.providers[route.provider].stream({**payload, "model": route.model}, policy.timeout_seconds):
+                            log.provider, log.served_model = route.provider, route.model
+                            if chunk.get("usage"):
+                                log.prompt_tokens = chunk["usage"].get("prompt_tokens", 0)
+                                log.completion_tokens = chunk["usage"].get("completion_tokens", 0)
+                            for choice in chunk.get("choices", []):
+                                delta = choice.get("delta") or {}
+                                if isinstance(delta.get("content"), str):
+                                    delta["content"] = restorer.feed(delta["content"])
+                                if choice.get("finish_reason"):
+                                    tail = restorer.flush()
+                                    if tail:
+                                        delta["content"] = (delta.get("content") or "") + tail
+                            chunk["id"] = f"chatcmpl-{log.request_id}"
+                            sent_any = True
+                            yield f"data: {json.dumps(chunk)}\n\n"
+                        log.fallback_used = log.attempts > 1
+                        break
+                    except ProviderError as exc:
+                        if sent_any:
+                            log.status, log.outcome = 502, "upstream_error"
+                            yield f"data: {json.dumps({'error': {'type': 'upstream_error', 'message': exc.message}})}\n\n"
+                            break
+                        continue
+                else:
+                    log.status, log.outcome = 502, "upstream_error"
+                    yield f"data: {json.dumps({'error': {'type': 'upstream_unavailable', 'message': 'All upstream models failed'}})}\n\n"
+                yield "data: [DONE]\n\n"
+                full = "".join(restorer.full)
+                log.pii_in_output = len([s for s in self.pii.detect(full) if s.text not in set(redactor.mapping.values())])
+                log.est_cost_usd = estimate_cost(log.served_model, log.prompt_tokens, log.completion_tokens)
+            finally:
+                self._finish(log, t_start)
+
+        return events(), {"x-sentinel-request-id": log.request_id}
 
     @staticmethod
     def _headers(log: RequestLog) -> dict:
