@@ -150,3 +150,41 @@ async def route_completion(providers: dict[str, Provider], routes, payload: dict
                 if attempt < max_retries:
                     await asyncio.sleep(backoff * (2**attempt))
     raise AllRoutesFailed(attempts, last)
+
+
+class FakeProvider:
+    """Scripted provider for tests and load tests.
+
+    `script` is a list of actions consumed in order, then the last one repeats:
+    an int status code raises ProviderError; a string is returned as the reply.
+    """
+
+    def __init__(self, name: str = "fake", script: list | None = None, latency: float = 0.0):
+        self.name, self.script, self.latency = name, list(script or ["ok"]), latency
+        self.calls: list[dict] = []
+
+    def _next(self):
+        return self.script.pop(0) if len(self.script) > 1 else self.script[0]
+
+    async def complete(self, payload: dict, timeout: float) -> dict:
+        self.calls.append(payload)
+        if self.latency:
+            await asyncio.sleep(self.latency)
+        action = self._next()
+        if isinstance(action, int):
+            raise ProviderError(action, "scripted failure")
+        text = action(payload) if callable(action) else action
+        return {
+            "id": "chatcmpl-fake", "object": "chat.completion", "created": int(time.time()), "model": payload["model"],
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": len(text.split()), "total_tokens": 10 + len(text.split())},
+        }
+
+    async def stream(self, payload: dict, timeout: float) -> AsyncIterator[dict]:
+        resp = await self.complete(payload, timeout)
+        text = resp["choices"][0]["message"]["content"]
+        for i in range(0, len(text), 4):
+            yield {"id": "chatcmpl-fake", "object": "chat.completion.chunk", "model": payload["model"],
+                   "choices": [{"index": 0, "delta": {"content": text[i : i + 4]}, "finish_reason": None}]}
+        yield {"id": "chatcmpl-fake", "object": "chat.completion.chunk", "model": payload["model"],
+               "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
