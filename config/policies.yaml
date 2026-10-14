@@ -12,7 +12,9 @@ defaults:
   pii: redact
   injection: block
   injection_threshold: 0.5
-  cache: {enabled: true, similarity: 0.92, ttl_seconds: 86400}
+  # similarity: picked with eval/run_cache.py (0 wrong hits at every threshold thanks to the intent
+  # guard; 0.5 maximises hits with the default embedder). Re-run it if you switch embedders.
+  cache: {enabled: true, similarity: 0.5, ttl_seconds: 86400}
   models:
     # requested model -> ordered fallback chain of (provider, model)
     default:
@@ -24,7 +26,7 @@ defaults:
 apps:
   docsight:
     key_env: SENTINEL_KEY_DOCSIGHT
-    cache: {enabled: true, similarity: 0.92, ttl_seconds: 86400}
+    cache: {enabled: true, similarity: 0.5, ttl_seconds: 86400}
 
   helpdesk:
     key_env: SENTINEL_KEY_HELPDESK
