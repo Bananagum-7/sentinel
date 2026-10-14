@@ -1,0 +1,9 @@
+[project]
+name = "sentinel"
+version = "0.1.0"
+description = "OpenAI-compatible LLM gateway with guardrails, caching, fallback and tracing"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]

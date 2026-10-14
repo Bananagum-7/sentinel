@@ -1,0 +1,37 @@
+# Each client app gets its own gateway key and its own rules.
+# Gateway keys are read from environment variables, never stored in this file.
+#
+# pii:        redact  -> replace PII with placeholders before the model sees it, restore after
+#             block   -> reject requests containing PII
+#             off
+# injection:  block | flag (log only) | off
+# cache:      semantic cache settings; disable for anything that takes actions
+
+defaults:
+  rate_limit: {requests_per_minute: 60, burst: 10}
+  pii: redact
+  injection: block
+  injection_threshold: 0.5
+  cache: {enabled: true, similarity: 0.92, ttl_seconds: 86400}
+  models:
+    # requested model -> ordered fallback chain of (provider, model)
+    default:
+      - {provider: groq, model: llama-3.3-70b-versatile}
+      - {provider: groq, model: llama-3.1-8b-instant}
+  timeout_seconds: 30
+  max_retries: 2
+
+apps:
+  docsight:
+    key_env: SENTINEL_KEY_DOCSIGHT
+    cache: {enabled: true, similarity: 0.92, ttl_seconds: 86400}
+
+  helpdesk:
+    key_env: SENTINEL_KEY_HELPDESK
+    # Agent traffic triggers actions (refunds), so never serve it from cache
+    cache: {enabled: false}
+    pii: redact
+
+  demo:
+    key_env: SENTINEL_KEY_DEMO
+    rate_limit: {requests_per_minute: 20, burst: 5}
