@@ -97,3 +97,7 @@ dashboard.py     Streamlit dashboard
 eval/            injection, PII, cache and overhead evals; CI gate; locust load test
 config/          policies.yaml
 ```
+
+## Development history
+
+See [DEVELOPMENT_TIMELINE.md](DEVELOPMENT_TIMELINE.md) for the milestone-by-milestone build order. Its dates are author estimates; the real commit timestamps are in `git log`.
