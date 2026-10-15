@@ -1,0 +1,60 @@
+{"cached": "How do I reset my password?", "query": "How can I reset my password?", "should_hit": true}
+{"cached": "How do I cancel my subscription?", "query": "How can I cancel my subscription?", "should_hit": true}
+{"cached": "Where can I download my invoices?", "query": "Where do I download my invoices?", "should_hit": true}
+{"cached": "How do I change the email on my account?", "query": "How can I change my account email?", "should_hit": true}
+{"cached": "What payment methods do you accept?", "query": "Which payment methods do you accept?", "should_hit": true}
+{"cached": "How do I enable two-factor authentication?", "query": "How do I turn on two-factor authentication?", "should_hit": true}
+{"cached": "Can I get a refund after 30 days?", "query": "Is a refund possible after 30 days?", "should_hit": true}
+{"cached": "How do I delete my account?", "query": "How can I delete my account?", "should_hit": true}
+{"cached": "Do you ship internationally?", "query": "Do you offer international shipping?", "should_hit": true}
+{"cached": "How do I contact customer support?", "query": "How can I contact customer support?", "should_hit": true}
+{"cached": "How long does delivery take?", "query": "How long does delivery usually take?", "should_hit": true}
+{"cached": "How do I update my billing address?", "query": "How can I update my billing address?", "should_hit": true}
+{"cached": "Is there a student discount?", "query": "Do you have a student discount?", "should_hit": true}
+{"cached": "How do I export my data?", "query": "How can I export all my data?", "should_hit": true}
+{"cached": "Why was my payment declined?", "query": "Why did my payment get declined?", "should_hit": true}
+{"cached": "How do I add a team member?", "query": "How can I add a new team member?", "should_hit": true}
+{"cached": "What is your return policy?", "query": "What's your return policy?", "should_hit": true}
+{"cached": "How do I track my order?", "query": "How can I track my order?", "should_hit": true}
+{"cached": "Can I change my plan later?", "query": "Can I change my plan at a later time?", "should_hit": true}
+{"cached": "How do I turn off email notifications?", "query": "How do I turn off the email notifications?", "should_hit": true}
+{"cached": "What does the pro plan include?", "query": "What is included in the pro plan?", "should_hit": true}
+{"cached": "How do I log out of all devices?", "query": "How can I log out of all my devices?", "should_hit": true}
+{"cached": "Is my data encrypted?", "query": "Is my data encrypted at rest?", "should_hit": true}
+{"cached": "How do I reset the app to default settings?", "query": "How can I reset the app to its default settings?", "should_hit": true}
+{"cached": "Where is my order confirmation email?", "query": "Where can I find my order confirmation email?", "should_hit": true}
+{"cached": "How do I apply a coupon code?", "query": "How can I apply a coupon code at checkout?", "should_hit": true}
+{"cached": "Can I pause my subscription?", "query": "Is it possible to pause my subscription?", "should_hit": true}
+{"cached": "How do I report a bug?", "query": "How can I report a bug in the app?", "should_hit": true}
+{"cached": "What are your support hours?", "query": "What are the support hours?", "should_hit": true}
+{"cached": "How do I change my username?", "query": "How can I change my username?", "should_hit": true}
+{"cached": "What was the refund limit in 2021?", "query": "What was the refund limit in 2022?", "should_hit": false}
+{"cached": "Can I get a refund after 30 days?", "query": "Can I get a refund after 60 days?", "should_hit": false}
+{"cached": "What is the price of the 10 GB plan?", "query": "What is the price of the 100 GB plan?", "should_hit": false}
+{"cached": "Where is order 4471?", "query": "Where is order 4417?", "should_hit": false}
+{"cached": "How do I enable two-factor authentication?", "query": "How do I disable two-factor authentication?", "should_hit": false}
+{"cached": "How do I add a team member?", "query": "How do I remove a team member?", "should_hit": false}
+{"cached": "Do you ship to Canada?", "query": "Do you ship to Mexico?", "should_hit": false}
+{"cached": "How do I upgrade to the pro plan?", "query": "How do I downgrade from the pro plan?", "should_hit": false}
+{"cached": "What does the free plan include?", "query": "What does the pro plan include?", "should_hit": false}
+{"cached": "How do I turn on email notifications?", "query": "How do I turn off email notifications?", "should_hit": false}
+{"cached": "Is the iOS app free?", "query": "Is the Android app free?", "should_hit": false}
+{"cached": "How long is the warranty on the X200?", "query": "How long is the warranty on the X300?", "should_hit": false}
+{"cached": "How do I use the `export_csv` option?", "query": "How do I use the `export_json` option?", "should_hit": false}
+{"cached": "Can I pay with PayPal?", "query": "Can I pay with Bitcoin?", "should_hit": false}
+{"cached": "What is the delivery time to Mumbai?", "query": "What is the delivery time to Delhi?", "should_hit": false}
+{"cached": "Can I return an opened item?", "query": "Can I return an unopened item?", "should_hit": false}
+{"cached": "How do I reset my password?", "query": "How do I reset my PIN?", "should_hit": false}
+{"cached": "What are your support hours on weekdays?", "query": "What are your support hours on weekends?", "should_hit": false}
+{"cached": "Can I get an invoice for March?", "query": "Can I get an invoice for April?", "should_hit": false}
+{"cached": "Is there a discount for 5 seats?", "query": "Is there a discount for 50 seats?", "should_hit": false}
+{"cached": "Does the basic plan include API access?", "query": "Does the basic plan include SSO?", "should_hit": false}
+{"cached": "How do I cancel my order?", "query": "How do I cancel my subscription?", "should_hit": false}
+{"cached": "How do I log in with Google?", "query": "How do I log in with Apple?", "should_hit": false}
+{"cached": "What happens if I miss one payment?", "query": "What happens if I miss two payments?", "should_hit": false}
+{"cached": "Can I transfer my license to a new laptop?", "query": "Can I transfer my license to a new user?", "should_hit": false}
+{"cached": "Is the 2023 model compatible?", "query": "Is the 2019 model compatible?", "should_hit": false}
+{"cached": "How do I change my email?", "query": "How do I change my phone number?", "should_hit": false}
+{"cached": "What is the max file upload size on the free plan?", "query": "What is the max file upload size on the business plan?", "should_hit": false}
+{"cached": "How do I delete a project?", "query": "How do I archive a project?", "should_hit": false}
+{"cached": "Do you offer refunds on annual plans?", "query": "Do you offer refunds on monthly plans?", "should_hit": false}
